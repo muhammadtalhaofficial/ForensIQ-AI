@@ -1,0 +1,256 @@
+import { createServerFn } from '@tanstack/react-start';
+import { fetchWalletBalance } from '../solana/heliusClient';
+import { analyzeWallet } from '../solana/analyzer';
+import { semanticSearch } from '../rag/retriever';
+import { buildRagContext } from '../rag/contextBuilder';
+import { storeReportOnChain } from '../solana/memoStore';
+import { createClient } from '@supabase/supabase-js';
+import Groq from 'groq-sdk';
+
+// Use a lazy getter for Supabase to avoid client-side initialization crashes
+function getSupabase() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    throw new Error('Missing Supabase configuration (NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY)');
+  }
+  return createClient(url, key);
+}
+
+// Lazy getter for Groq
+let groq: Groq | null = null;
+function getGroq() {
+  if (!groq) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) {
+      return null;
+    }
+    groq = new Groq({ apiKey });
+  }
+  return groq;
+}
+
+// Normalize whatever the LLM returns for quantumRisk into a proper object
+function normalizeQuantumRisk(raw: any) {
+  if (!raw && raw !== 0) {
+    return {
+      isAtRisk: false,
+      exposedPublicKeyCount: 0,
+      recommendation: 'No quantum risk data available.',
+    };
+  }
+  if (typeof raw === 'number') {
+    return {
+      isAtRisk: raw > 10,
+      exposedPublicKeyCount: raw,
+      recommendation: raw > 10
+        ? 'Migrate funds to a fresh wallet that has never signed a transaction to eliminate quantum exposure.'
+        : 'Quantum risk is currently low for this wallet.',
+    };
+  }
+  if (typeof raw === 'object') {
+    return {
+      isAtRisk: raw.isAtRisk ?? false,
+      exposedPublicKeyCount: raw.exposedPublicKeyCount ?? 0,
+      recommendation: raw.recommendation ?? 'No recommendation available.',
+    };
+  }
+  return {
+    isAtRisk: false,
+    exposedPublicKeyCount: 0,
+    recommendation: 'No quantum risk data available.',
+  };
+}
+
+export const investigateWallet = createServerFn({ method: 'POST' })
+  .inputValidator((walletAddress: string) => walletAddress)
+  .handler(async ({ data: walletAddress }) => {
+    console.log(`[SERVER] Investigating wallet: ${walletAddress}`);
+
+    if (!walletAddress) throw new Error('walletAddress required');
+
+    try {
+      const supabase = getSupabase();
+      const groqClient = getGroq();
+
+      const [balance, report] = await Promise.all([
+        fetchWalletBalance(walletAddress),
+        analyzeWallet(walletAddress, { maxRecords: 100 }),
+      ]);
+
+      console.log(`[SERVER] Balance: ${balance} SOL, Transactions: ${report.txCount}`);
+
+      const signals = report.signals;
+      const txCount = report.txCount;
+
+      const query = [
+        signals.rapidDraining && 'phishing rapid drain wallet drainer',
+        signals.mixerInteraction && 'mixer tumbler money laundering',
+        signals.flashAttack && 'flash loan exploit signature',
+      ].filter(Boolean).join(' ') || 'blockchain forensic investigation';
+
+      let ragDocs: any[] = [];
+      let ragContext = '';
+      try {
+        ragDocs = await semanticSearch(query, { topK: 6 });
+        ragContext = await buildRagContext(ragDocs);
+      } catch (e) {
+        console.error('RAG search failed:', e);
+      }
+
+      const preferredModel = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+      const fallbackModel = process.env.GROQ_FALLBACK_MODEL || 'llama-3.1-8b-instant';
+
+      let completion: any = null;
+      const completionPayload = {
+        temperature: 0.2,
+        max_tokens: 4096,
+        response_format: { type: 'json_object' as const },
+        messages: [
+          {
+            role: 'system' as const,
+            content: `You are ForensiqAI, an elite blockchain forensic investigator. Return only valid JSON with these exact fields: riskLevel (low|medium|high|critical), confidence (0-100), summary (plain English 2-3 sentences), fullReport (markdown with 5 sections: Overview, Transaction Patterns, Forensic Findings, Quantum Risk, Conclusion), patterns (array of {name, detected, detail}), relatedAddresses (string array), quantumRisk (object with isAtRisk boolean, exposedPublicKeyCount number, recommendation string).`
+          },
+          {
+            role: 'user' as const,
+            content: `${ragContext}\n\nWallet: ${walletAddress}\nBalance: ${balance} SOL\nTransactions: ${txCount}\nTotal Volume: ${report.totalOutgoing} SOL\nRapid Drain: ${signals.rapidDraining}\nMixer Interaction: ${signals.mixerInteraction}\nUnique Counterparties: ${report.counterparties.length}\nInvestigate this wallet and return your forensic report as JSON.`
+          }
+        ]
+      };
+
+      // Short-circuit to local mock when explicitly requested
+      if (process.env.FORCE_LOCAL_MOCK === 'true') {
+        const mock = {
+          riskLevel: 'low',
+          confidence: 60,
+          summary: 'Mock summary: local mock enabled.',
+          fullReport: '## Overview\n\nThis report was generated by the local mock fallback.',
+          patterns: [{ name: 'mock-pattern', detected: false, detail: 'No data available' }],
+          relatedAddresses: [],
+          quantumRisk: {
+            isAtRisk: false,
+            exposedPublicKeyCount: 0,
+            recommendation: 'Mock mode active.',
+          },
+        };
+        completion = { choices: [{ message: { content: JSON.stringify(mock) } }] } as any;
+      }
+
+      // Try Groq preferred model, then fallback model
+      if (!completion && groqClient) {
+        try {
+          completion = await groqClient.chat.completions.create({
+            model: preferredModel,
+            ...completionPayload,
+          });
+          console.log(`[SERVER] Groq success with model: ${preferredModel}`);
+        } catch (e: any) {
+          console.warn('Groq primary model failed:', e?.error?.error?.code ?? e?.message ?? e);
+          try {
+            completion = await groqClient.chat.completions.create({
+              model: fallbackModel,
+              ...completionPayload,
+            });
+            console.log(`[SERVER] Groq success with fallback model: ${fallbackModel}`);
+          } catch (e2: any) {
+            console.error('Groq fallback model failed:', e2?.message ?? e2);
+          }
+        }
+      }
+
+      // If still no completion, use local mock rather than crashing
+      if (!completion) {
+        console.warn('[SERVER] All LLM attempts failed — using local mock.');
+        const mock = {
+          riskLevel: 'medium',
+          confidence: 50,
+          summary: 'Analysis temporarily unavailable. LLM services could not be reached. Manual review recommended.',
+          fullReport: '## Overview\n\nThe automated analysis pipeline was unable to complete due to LLM service unavailability.\n\n## Transaction Patterns\n\nManual review required.\n\n## Forensic Findings\n\nNo automated findings available.\n\n## Quantum Risk\n\nUnable to assess.\n\n## Conclusion\n\nPlease retry or contact support.',
+          patterns: [{ name: 'analysis-unavailable', detected: false, detail: 'LLM service unreachable' }],
+          relatedAddresses: [],
+          quantumRisk: {
+            isAtRisk: false,
+            exposedPublicKeyCount: 0,
+            recommendation: 'Unable to assess quantum risk at this time.',
+          },
+        };
+        completion = { choices: [{ message: { content: JSON.stringify(mock) } }] } as any;
+      }
+
+      const result = JSON.parse(completion.choices[0].message.content!);
+
+      // Always normalize quantumRisk regardless of what LLM returned
+      const quantumRisk = normalizeQuantumRisk(result.quantumRisk);
+
+      let txSignature, explorerUrl;
+      try {
+        const stored = await storeReportOnChain({
+          wallet: walletAddress,
+          riskScore: result.confidence,
+          reportHash: '',
+          analyzedAt: new Date().toISOString(),
+        } as any);
+        txSignature = stored.signature;
+        explorerUrl = `https://explorer.solana.com/tx/${txSignature}?cluster=devnet`;
+      } catch (e) {
+        console.warn('[SERVER] On-chain storage failed (non-fatal):', e);
+      }
+
+      try {
+        await supabase.from('investigation_reports').insert({
+          wallet_address: walletAddress,
+          risk_level: result.riskLevel,
+          confidence: result.confidence,
+          summary: result.summary,
+          full_report: result.fullReport,
+          tx_signature: txSignature || null,
+          solana_explorer_url: explorerUrl || null,
+        });
+      } catch (e) {
+        console.error('[SERVER] Failed to save to Supabase:', e);
+      }
+
+      return {
+        success: true,
+        result: {
+          walletAddress,
+          balance,
+          transactionCount: txCount,
+          totalVolumeSOL: report.totalOutgoing,
+          uniqueCounterparties: report.counterparties.length,
+          ...result,
+          quantumRisk, // always a proper object, never a number or undefined
+          txSignature,
+          explorerUrl,
+          ragSources: ragDocs.map(d => ({ title: d.document?.title, similarity: d.score }))
+        }
+      };
+    } catch (err: any) {
+      console.error('[SERVER] Investigation failed:', err);
+      throw new Error(err.message);
+    }
+  });
+
+export const generateVoice = createServerFn({ method: 'POST' })
+  .inputValidator((text: string) => text)
+  .handler(async ({ data: text }) => {
+    const voiceId = process.env.ELEVENLABS_VOICE_ID;
+    const apiKey = process.env.ELEVENLABS_API_KEY;
+
+    if (!voiceId || !apiKey) throw new Error('Missing ElevenLabs config');
+
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: 'POST',
+      headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        text: text.slice(0, 2500),
+        model_id: 'eleven_multilingual_v2',
+        voice_settings: { stability: 0.55, similarity_boost: 0.75 }
+      })
+    });
+
+    if (!response.ok) throw new Error(`ElevenLabs API error: ${response.status}`);
+
+    const audio = await response.arrayBuffer();
+    return Buffer.from(audio).toString('base64');
+  });

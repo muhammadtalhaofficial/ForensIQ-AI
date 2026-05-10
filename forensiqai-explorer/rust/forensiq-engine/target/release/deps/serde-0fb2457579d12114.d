@@ -1,0 +1,14 @@
+E:\ForensIQ\forensiqai-explorer\rust\forensiq-engine\target\release\deps\serde-0fb2457579d12114.d: C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs E:\ForensIQ\forensiqai-explorer\rust\forensiq-engine\target\release\build\serde-3f7b02e6a96549d7\out/private.rs
+
+E:\ForensIQ\forensiqai-explorer\rust\forensiq-engine\target\release\deps\libserde-0fb2457579d12114.rlib: C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs E:\ForensIQ\forensiqai-explorer\rust\forensiq-engine\target\release\build\serde-3f7b02e6a96549d7\out/private.rs
+
+E:\ForensIQ\forensiqai-explorer\rust\forensiq-engine\target\release\deps\libserde-0fb2457579d12114.rmeta: C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs E:\ForensIQ\forensiqai-explorer\rust\forensiq-engine\target\release\build\serde-3f7b02e6a96549d7\out/private.rs
+
+C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\lib.rs:
+C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\integer128.rs:
+C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\mod.rs:
+C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\de.rs:
+C:\Users\muham\.cargo\registry\src\index.crates.io-1949cf8c6b5b557f\serde-1.0.228\src\private\ser.rs:
+E:\ForensIQ\forensiqai-explorer\rust\forensiq-engine\target\release\build\serde-3f7b02e6a96549d7\out/private.rs:
+
+# env-dep:OUT_DIR=E:\\ForensIQ\\forensiqai-explorer\\rust\\forensiq-engine\\target\\release\\build\\serde-3f7b02e6a96549d7\\out
